@@ -8,6 +8,26 @@ import streamlit as st
 IBGE_MUNICIPIOS_URL = "https://servicodados.ibge.gov.br/api/v1/localidades/municipios"
 
 
+def _extrair_uf(m: dict) -> str:
+    """
+    Extrai a sigla da UF de um município, tentando os dois caminhos possíveis
+    no JSON do IBGE. Alguns municípios/distritos especiais (ex: Fernando de
+    Noronha) não têm o campo 'microrregiao' preenchido, então usamos
+    'regiao-imediata' como alternativa.
+    """
+    try:
+        return m["microrregiao"]["mesorregiao"]["UF"]["sigla"]
+    except (KeyError, TypeError):
+        pass
+
+    try:
+        return m["regiao-imediata"]["regiao-intermediaria"]["UF"]["sigla"]
+    except (KeyError, TypeError):
+        pass
+
+    return "??"
+
+
 @st.cache_data(ttl=60 * 60 * 24)  # cache de 24h, a lista de municípios não muda
 def carregar_municipios() -> list[dict]:
     """
@@ -24,7 +44,7 @@ def carregar_municipios() -> list[dict]:
             {
                 "geocode": m["id"],
                 "nome": m["nome"],
-                "uf": m["microrregiao"]["mesorregiao"]["UF"]["sigla"],
+                "uf": _extrair_uf(m),
             }
         )
     # Ordena por nome para facilitar a busca no selectbox
