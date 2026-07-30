@@ -8,7 +8,6 @@ import pydeck as pdk
 import streamlit as st
 
 from utils.geolocalizacao import cidades_do_estado, lista_estados
-from utils.ibge import carregar_municipios, formatar_opcao
 from utils.infodengue import (
     NIVEL_ALERTA,
     NIVEL_COR_RGBA,
@@ -35,22 +34,39 @@ tab_cidade, tab_mapa = st.tabs(["🔎 Consulta por Cidade", "🗺️ Mapa por Es
 # ABA 1 — CONSULTA DETALHADA POR CIDADE (funcionalidade original)
 # =============================================================================
 with tab_cidade:
-    with st.spinner("Carregando lista de municípios..."):
-        municipios = carregar_municipios()
+    estados_cidade = lista_estados()
 
-    col1, col2 = st.columns([2, 1])
+    col1, col2, col3 = st.columns([1.3, 1.7, 1])
 
     with col1:
-        municipio_selecionado = st.selectbox(
-            "Escolha o município",
-            options=municipios,
-            format_func=formatar_opcao,
+        estado_consulta = st.selectbox(
+            "Estado (UF)",
+            options=estados_cidade,
+            format_func=lambda e: f"{e['nome']} ({e['uf']})",
             index=None,
-            placeholder="Digite o nome da cidade...",
-            key="select_cidade",
+            placeholder="Escolha um estado...",
+            key="select_estado_cidade",
         )
 
     with col2:
+        if estado_consulta is not None:
+            cidades_opcoes = cidades_do_estado(estado_consulta["codigo_uf"]).to_dict("records")
+            placeholder_cidade = "Escolha um município..."
+        else:
+            cidades_opcoes = []
+            placeholder_cidade = "Primeiro escolha um estado..."
+
+        municipio_selecionado = st.selectbox(
+            "Município",
+            options=cidades_opcoes,
+            format_func=lambda c: c["nome"],
+            index=None,
+            placeholder=placeholder_cidade,
+            disabled=estado_consulta is None,
+            key="select_cidade",
+        )
+
+    with col3:
         doenca_cidade = st.selectbox(
             "Doença",
             options=["dengue", "chikungunya", "zika"],
@@ -66,13 +82,15 @@ with tab_cidade:
         key="slider_anos",
     )
 
-    if municipio_selecionado is None:
+    if estado_consulta is None:
+        st.info("👆 Selecione um estado e depois um município para visualizar os dados.")
+    elif municipio_selecionado is None:
         st.info("👆 Selecione um município para visualizar os dados.")
     else:
         with st.spinner(f"Buscando dados de {doenca_cidade} para {municipio_selecionado['nome']}..."):
             try:
                 df = buscar_dados(
-                    geocode=municipio_selecionado["geocode"],
+                    geocode=municipio_selecionado["codigo_ibge"],
                     doenca=doenca_cidade,
                     ano_inicio=anos[0],
                     ano_fim=anos[1],
