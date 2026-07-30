@@ -212,18 +212,32 @@ with tab_mapa:
                 def _atualizar_barra(concluidos: int, total: int):
                     barra.progress(concluidos / total, text=f"Consultando municípios... {concluidos}/{total}")
 
-                dados_lote = buscar_dados_em_lote(
+                dados_lote, erros_lote = buscar_dados_em_lote(
                     geocodes=cidades["codigo_ibge"].tolist(),
                     doenca=doenca_mapa,
                     progresso_callback=_atualizar_barra,
                 )
                 barra.empty()
                 st.session_state[cache_key] = dados_lote
+                st.session_state[f"{cache_key}_erros"] = erros_lote
 
             dados_lote = st.session_state[cache_key]
+            erros_lote = st.session_state.get(f"{cache_key}_erros", {})
 
             if dados_lote.empty:
                 st.warning("Não foi possível obter dados para nenhum município deste estado.")
+                if erros_lote:
+                    with st.expander("🔧 Detalhes técnicos (diagnóstico)"):
+                        st.write(
+                            "Resumo dos motivos pelos quais nenhuma cidade retornou dado:"
+                        )
+                        st.json(erros_lote)
+                        st.caption(
+                            "'sem_dado' significa que a API respondeu normalmente, mas não "
+                            "tem série histórica para essa doença nessa cidade (comum em "
+                            "cidades pequenas para zika/chikungunya). Erros como 'HTTP 429' "
+                            "ou 'timeout' indicam bloqueio/limite de requisições da API."
+                        )
             else:
                 mapa_df = cidades.merge(
                     dados_lote, left_on="codigo_ibge", right_on="geocode", how="inner"

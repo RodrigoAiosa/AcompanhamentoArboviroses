@@ -2,6 +2,8 @@
 Utilitários para consultar a API pública do InfoDengue (Fiocruz).
 Documentação: https://info.dengue.mat.br/services/api/doc
 """
+import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
@@ -10,6 +12,14 @@ import requests
 import streamlit as st
 
 BASE_URL = "https://info.dengue.mat.br/api/alertcity"
+
+# Alguns servidores bloqueiam requisições sem um User-Agent "de navegador".
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (compatible; PainelArboviroses/1.0; "
+        "+https://acompanhamentoarboviroses.streamlit.app)"
+    )
+}
 
 # Mapeamento do nível de alerta retornado pela API para cor/rótulo em português
 NIVEL_ALERTA = {
@@ -58,7 +68,7 @@ def buscar_dados(
         "ey_end": ano_fim,
     }
 
-    resp = requests.get(BASE_URL, params=params, timeout=20)
+    resp = requests.get(BASE_URL, params=params, headers=HEADERS, timeout=25)
     resp.raise_for_status()
     dados = resp.json()
 
@@ -86,51 +96,73 @@ def nivel_atual(df: pd.DataFrame) -> dict:
     return NIVEL_ALERTA.get(ultimo_nivel, {"cor": "⚪", "label": "Nível desconhecido"})
 
 
-def _buscar_snapshot_cidade(geocode: int, doenca: str) -> dict | None:
+def _buscar_snapshot_cidade(geocode: int, doenca: str, tentativas: int = 2) -> tuple[dict | None, str | None]:
     """
     Busca apenas o snapshot mais recente (última semana disponível) de uma
     cidade. Usado internamente pela busca em lote para montar o mapa.
     Consulta os últimos ~2 anos para garantir que sempre haja algum dado,
     mesmo perto da virada do ano.
+
+    Retorna (resultado, erro): 'erro' é None em caso de sucesso, ou uma
+    string curta descrevendo a falha (usada para diagnóstico agregado).
     """
     ano_atual = date.today().year
-    try:
-        df = buscar_dados(geocode, doenca=doenca, ano_inicio=ano_atual - 1, ano_fim=ano_atual)
-    except Exception:
-        return None
+    ultimo_erro = None
 
-    if df.empty or "nivel" not in df.columns:
-        return None
+    for tentativa in range(tentativas):
+        try:
+            df = buscar_dados(geocode, doenca=doenca, ano_inicio=ano_atual - 1, ano_fim=ano_atual)
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response is not None else "?"
+            ultimo_erro = f"HTTP {status}"
+        except requests.exceptions.Timeout:
+            ultimo_erro = "timeout"
+        except requests.exceptions.ConnectionError:
+            ultimo_erro = "erro de conexão"
+        except Exception as e:
+            ultimo_erro = type(e).__name__
+        else:
+            if df.empty or "nivel" not in df.columns:
+                return None, "sem_dado"
 
-    casos_col = "casos_est" if "casos_est" in df.columns else "casos"
-    ultima = df.iloc[-1]
-    return {
-        "geocode": geocode,
-        "nivel": int(ultima["nivel"]),
-        "casos": float(ultima.get(casos_col, 0) or 0),
-        "data": ultima["data"],
-    }
+            casos_col = "casos_est" if "casos_est" in df.columns else "casos"
+            ultima = df.iloc[-1]
+            return {
+                "geocode": geocode,
+                "nivel": int(ultima["nivel"]),
+                "casos": float(ultima.get(casos_col, 0) or 0),
+                "data": ultima["data"],
+            }, None
+
+        time.sleep(0.5 * (tentativa + 1))  # pequeno backoff antes de tentar de novo
+
+    return None, ultimo_erro
 
 
 def buscar_dados_em_lote(
     geocodes: list[int],
     doenca: str = "dengue",
-    max_workers: int = 15,
+    max_workers: int = 8,
     progresso_callback=None,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, dict]:
     """
     Busca o snapshot mais recente de várias cidades em paralelo (usado no
     mapa por estado). Cidades sem dado disponível ou com erro na consulta
-    são simplesmente omitidas do resultado.
+    são omitidas do resultado, mas o motivo é contabilizado no diagnóstico.
 
     Parâmetros:
         geocodes: lista de códigos IBGE dos municípios
         doenca: 'dengue' | 'chikungunya' | 'zika'
-        max_workers: número de requisições simultâneas
+        max_workers: número de requisições simultâneas (mantido moderado
+            para evitar bloqueio por limite de requisições da própria API)
         progresso_callback: função opcional chamada a cada cidade processada,
             recebe (concluidos, total) — usada para exibir uma barra de progresso
+
+    Retorna:
+        (DataFrame com os dados obtidos, dict com contagem de erros por tipo)
     """
     resultados = []
+    erros = Counter()
     total = len(geocodes)
     concluidos = 0
 
@@ -140,10 +172,12 @@ def buscar_dados_em_lote(
         }
         for futuro in as_completed(futuros):
             concluidos += 1
-            resultado = futuro.result()
+            resultado, erro = futuro.result()
             if resultado is not None:
                 resultados.append(resultado)
+            elif erro:
+                erros[erro] += 1
             if progresso_callback:
                 progresso_callback(concluidos, total)
 
-    return pd.DataFrame(resultados)
+    return pd.DataFrame(resultados), dict(erros)
