@@ -225,7 +225,23 @@ with tab_mapa:
             erros_lote = st.session_state.get(f"{cache_key}_erros", {})
 
             if dados_lote.empty:
-                st.warning("Não foi possível obter dados para nenhum município deste estado.")
+                total_erros = sum(erros_lote.values()) if erros_lote else 0
+                sem_dado_count = erros_lote.get("sem_dado", 0)
+                maioria_sem_dado = total_erros > 0 and sem_dado_count / total_erros >= 0.9
+
+                if doenca_mapa != "dengue" and maioria_sem_dado:
+                    st.info(
+                        f"📭 Nenhum município de {estado_selecionado['nome']} tem série de "
+                        f"dados recente o suficiente para calcular o nível de alerta de "
+                        f"**{doenca_mapa}**. Isso é esperado: como os casos de "
+                        f"{doenca_mapa} são bem menos numerosos que os de dengue nos últimos "
+                        f"anos, o InfoDengue frequentemente não tem dado suficiente para "
+                        f"gerar o indicador semanal na maioria dos municípios. Tente "
+                        f"selecionar **Dengue**, que tem cobertura de dados muito mais ampla."
+                    )
+                else:
+                    st.warning("Não foi possível obter dados para nenhum município deste estado.")
+
                 if erros_lote:
                     with st.expander("🔧 Detalhes técnicos (diagnóstico)"):
                         st.write(
@@ -245,10 +261,17 @@ with tab_mapa:
                 mapa_df["cor"] = mapa_df["nivel"].map(NIVEL_COR_RGBA)
                 mapa_df["raio"] = (mapa_df["casos"].clip(lower=1) ** 0.5) * 400 + 1500
 
+                cobertura = len(mapa_df) / total_cidades if total_cidades else 0
                 st.caption(
                     f"{len(mapa_df)} de {total_cidades} municípios com dado disponível "
                     f"para {doenca_mapa}."
                 )
+                if doenca_mapa != "dengue" and cobertura < 0.5:
+                    st.caption(
+                        f"ℹ️ Cobertura de dados mais baixa é esperada para {doenca_mapa}, "
+                        f"já que essa doença tem bem menos casos notificados que dengue "
+                        f"nos últimos anos."
+                    )
 
                 # --- Resumo por nível de alerta ------------------------------
                 resumo = mapa_df["nivel"].value_counts().sort_index()
