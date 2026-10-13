@@ -15,12 +15,14 @@ from utils.infodengue import (
     buscar_dados_em_lote,
     nivel_atual,
 )
+from esconder_selo import esconder_selo_streamlit
 
 st.set_page_config(
     page_title="Painel de Arboviroses - Brasil",
     page_icon="🦟",
     layout="wide",
 )
+esconder_selo_streamlit()  # oculta os controles do Streamlit Cloud
 
 st.title("🦟 Painel de Acompanhamento de Arboviroses")
 st.caption(
