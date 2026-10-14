@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel de Arboviroses – Brasil</title>
+<meta name="description" content="Acompanhe o nível de alerta e a evolução de casos de dengue, zika e chikungunya em qualquer município do Brasil, com dados do InfoDengue (Fiocruz) e IBGE.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦟</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly-basic.min.js"></script>
+<style>
+:root {
+  --bg: #f6f4ef;
+  --surface: #ffffff;
+  --surface-2: #efece4;
+  --ink: #1d2320;
+  --ink-2: #4f5752;
+  --ink-3: #7c837e;
+  --line: #dcd8ce;
+  --accent: #b3261e;
+  --accent-soft: rgba(179, 38, 30, .12);
+  --n1: #2e8b57; --n2: #e0b400; --n3: #e6750f; --n4: #c62828; --n0: #9aa09c;
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(20, 24, 22, .05), 0 6px 24px rgba(20, 24, 22, .06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121514; --surface: #1a1e1c; --surface-2: #232826; --ink: #eef0ec;
+    --ink-2: #b9bfba; --ink-3: #868d88; --line: #303633; --accent: #ef6a5f;
+    --accent-soft: rgba(239, 106, 95, .14); --shadow: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121514; --surface: #1a1e1c; --surface-2: #232826; --ink: #eef0ec;
+  --ink-2: #b9bfba; --ink-3: #868d88; --line: #303633; --accent: #ef6a5f;
+  --accent-soft: rgba(239, 106, 95, .14); --shadow: none; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 400 15px/1.55 "IBM Plex Sans", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+header.top { padding: 40px 0 8px; }
+.eyebrow { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+h1 { font-family: "Source Serif 4", Georgia, serif; font-weight: 700; font-size: clamp(28px, 4.4vw, 44px); line-height: 1.1; margin: 8px 0 10px; letter-spacing: -.01em; }
+.lede { color: var(--ink-2); max-width: 680px; margin: 0; }
+h2 { font-family: "Source Serif 4", Georgia, serif; font-size: 22px; margin: 0 0 4px; font-weight: 600; }
+h3 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 12px; font-weight: 600; }
+
+.tabs { display: flex; gap: 4px; margin: 28px 0 20px; border-bottom: 1px solid var(--line); }
+.tab {
+  appearance: none; background: none; border: 0; color: var(--ink-2); cursor: pointer;
+  font: 500 15px "IBM Plex Sans", sans-serif; padding: 10px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.panel[hidden] { display: none; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; }
+.controls { display: grid; grid-template-columns: 1.2fr 1.6fr 1fr 1.2fr; gap: 14px; align-items: end; }
+.controls.map { grid-template-columns: 2fr 1fr auto; }
+label { display: block; font-size: 13px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; }
+select, input[type="search"] {
+  width: 100%; font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px 12px; min-height: 42px;
+}
+select:disabled { opacity: .55; }
+select:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.range { display: flex; gap: 8px; align-items: center; }
+.range span { color: var(--ink-3); }
+.btn {
+  appearance: none; border: 0; border-radius: 10px; min-height: 42px; padding: 0 18px; cursor: pointer;
+  background: var(--accent); color: #fff; font: 600 14px "IBM Plex Sans", sans-serif; white-space: nowrap;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.empty { color: var(--ink-2); padding: 28px 4px; display: flex; gap: 10px; align-items: center; }
+.notice { border-radius: 10px; padding: 12px 14px; margin-top: 16px; font-size: 14px; }
+.notice.info { background: var(--surface-2); color: var(--ink-2); }
+.notice.warn { background: var(--accent-soft); color: var(--ink); }
+
+.alert-banner { display: flex; align-items: center; gap: 16px; margin-top: 20px; }
+.dot { width: 14px; height: 14px; border-radius: 50%; flex: none; box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 18%, transparent); }
+.alert-banner .lbl { font-size: 13px; color: var(--ink-3); }
+.alert-banner .val { font-family: "Source Serif 4", Georgia, serif; font-size: 24px; font-weight: 600; line-height: 1.2; }
+
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 18px; }
+.metric { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.metric .k { font-size: 13px; color: var(--ink-3); }
+.metric .v { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.metric .s { font-size: 12px; color: var(--ink-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 16px; }
+.chart { width: 100%; height: 420px; }
+.chart.short { height: 320px; }
+
+details { margin-top: 16px; }
+summary { cursor: pointer; color: var(--ink-2); font-weight: 500; padding: 6px 0; }
+.table-wrap { overflow: auto; max-height: 420px; border: 1px solid var(--line); border-radius: 10px; margin-top: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--surface-2); font-weight: 600; color: var(--ink-2); }
+td.num, th.num { text-align: right; }
+
+.progress { height: 6px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin-top: 16px; }
+.progress > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.progress-txt { font-size: 13px; color: var(--ink-3); margin-top: 6px; }
+.summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+.lvl { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.lvl b { font-size: 22px; font-variant-numeric: tabular-nums; margin-left: auto; }
+.lvl span { font-size: 13px; color: var(--ink-2); }
+#map { height: 520px; border-radius: var(--radius); border: 1px solid var(--line); margin-top: 16px; z-index: 0; }
+.leaflet-popup-content { font: 13px/1.45 "IBM Plex Sans", sans-serif; }
+.badge { display: inline-flex; align-items: center; gap: 6px; }
+.badge i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.mini-btn { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 0; text-decoration: underline; }
+
+footer { color: var(--ink-3); font-size: 13px; padding: 40px 0 48px; }
+footer a { color: var(--ink-2); }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 860px) {
+  .controls, .controls.map { grid-template-columns: 1fr 1fr; }
+  .metrics, .summary-row { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) {
+  .controls, .controls.map { grid-template-columns: 1fr; }
+  .chart { height: 340px; }
+  #map { height: 420px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">Vigilância epidemiológica · Brasil</div>
+    <h1>Painel de Acompanhamento de Arboviroses</h1>
+    <p class="lede">Nível de alerta e evolução semanal de casos de dengue, zika e chikungunya em qualquer município do país, com dados oficiais do InfoDengue (Fiocruz) e do IBGE.</p>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-cidade" aria-controls="panel-cidade" aria-selected="true">Consulta por cidade</button>
+    <button class="tab" role="tab" id="tab-mapa" aria-controls="panel-mapa" aria-selected="false">Mapa por estado</button>
+  </nav>
+
+  <!-- ABA 1 — CONSULTA POR CIDADE -->
+  <section class="panel" id="panel-cidade" role="tabpanel" aria-labelledby="tab-cidade">
+    <div class="card">
+      <div class="controls">
+        <div>
+          <label for="c-uf">Estado (UF)</label>
+          <select id="c-uf"><option value="">Escolha um estado…</option></select>
+        </div>
+        <div>
+          <label for="c-cidade">Município</label>
+          <select id="c-cidade" disabled><option value="">Primeiro escolha um estado…</option></select>
+        </div>
+        <div>
+          <label for="c-doenca">Doença</label>
+          <select id="c-doenca">
+            <option value="dengue">Dengue</option>
+            <option value="chikungunya">Chikungunya</option>
+            <option value="zika">Zika</option>
+          </select>
+        </div>
+        <div>
+          <label for="c-ano-ini">Período</label>
+          <div class="range">
+            <select id="c-ano-ini" aria-label="Ano inicial"></select>
+            <span>a</span>
+            <select id="c-ano-fim" aria-label="Ano final"></select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="c-result"></div>
+  </section>
+
+  <!-- ABA 2 — MAPA POR ESTADO -->
+  <section class="panel" id="panel-mapa" role="tabpanel" aria-labelledby="tab-mapa" hidden>
+    <div class="card">
+      <h2>Mapa de risco por município</h2>
+      <p style="color:var(--ink-2);margin:0 0 16px;font-size:14px">Escolha um estado para ver o nível de alerta de cada cidade. Estados maiores levam alguns segundos (uma consulta por município).</p>
+      <div class="controls map">
+        <div>
+          <label for="m-uf">Estado (UF)</label>
+          <select id="m-uf"><option value="">Escolha um estado…</option></select>
+        </div>
+        <div>
+          <label for="m-doenca">Doença</label>
+          <select id="m-doenca">
+            <option value="dengue">Dengue</option>
+            <option value="chikungunya">Chikungunya</option>
+            <option value="zika">Zika</option>
+          </select>
+        </div>
+        <button class="btn" id="m-carregar" disabled>Carregar mapa</button>
+      </div>
+      <div id="m-progress"></div>
+    </div>
+    <div id="m-result"></div>
+  </section>
+
+  <footer>
+    Fontes: <a href="https://info.dengue.mat.br" target="_blank" rel="noopener">InfoDengue</a> (Fiocruz/EMAp-FGV) ·
+    <a href="https://servicodados.ibge.gov.br/api/docs/localidades" target="_blank" rel="noopener">IBGE</a> ·
+    coordenadas de <a href="https://github.com/kelvins/Municipios-Brasileiros" target="_blank" rel="noopener">kelvins/Municipios-Brasileiros</a>.
+    Os dados das semanas mais recentes são preliminares e consideram apenas casos notificados (SINAN).
+    · <a href="https://github.com/RodrigoAiosa/AcompanhamentoArboviroses" target="_blank" rel="noopener">Código no GitHub</a>
+  </footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------------------------------------------------------------------------
+  // Constantes
+  // ---------------------------------------------------------------------------
+  const NIVEL = {
+    1: { cor: "var(--n1)", hex: "#2e8b57", nome: "Verde", label: "Baixo risco" },
+    2: { cor: "var(--n2)", hex: "#e0b400", nome: "Amarelo", label: "Risco de epidemia" },
+    3: { cor: "var(--n3)", hex: "#e6750f", nome: "Laranja", label: "Epidemia em curso" },
+    4: { cor: "var(--n4)", hex: "#c62828", nome: "Vermelho", label: "Alerta de epidemia" },
+    0: { cor: "var(--n0)", hex: "#9aa09c", nome: "Sem dado", label: "Sem dados disponíveis" },
+  };
+  const ANO_ATUAL = new Date().getFullYear();
+  const DOENCA_NOME = { dengue: "Dengue", chikungunya: "Chikungunya", zika: "Zika" };
+  const fmt = new Intl.NumberFormat("pt-BR");
+  const fmtData = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  let ESTADOS = [];
+  let MUNICIPIOS = [];
+
+  // ---------------------------------------------------------------------------
+  // Dados locais (CSV do repositório)
+  // ---------------------------------------------------------------------------
+  function parseCSV(texto) {
+    const linhas = texto.replace(/^﻿/, "").trim().split(/\r?\n/);
+    const cab = linhas.shift().split(",");
+    return linhas.map((l) => {
+      const v = l.split(",");
+      const o = {};
+      cab.forEach((c, i) => (o[c] = v[i]));
+      return o;
+    });
+  }
+
+  async function carregarLocalidades() {
+    const [e, m] = await Promise.all([
+      fetch("data/estados.csv").then((r) => r.text()),
+      fetch("data/municipios.csv").then((r) => r.text()),
+    ]);
+    ESTADOS = parseCSV(e)
+      .map((x) => ({ codigo_uf: +x.codigo_uf, uf: x.uf, nome: x.nome, lat: +x.latitude, lon: +x.longitude }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    MUNICIPIOS = parseCSV(m)
+      .map((x) => ({ geocode: +x.codigo_ibge, nome: x.nome, lat: +x.latitude, lon: +x.longitude, capital: x.capital === "1", codigo_uf: +x.codigo_uf }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  }
+
+  const cidadesDoEstado = (codigoUf) => MUNICIPIOS.filter((c) => c.codigo_uf === codigoUf);
+  const estadoPorUf = (uf) => ESTADOS.find((e) => e.uf === uf);
+
+  // ---------------------------------------------------------------------------
+  // InfoDengue — via /api/alertcity (função da Vercel) com fallback direto
+  // ---------------------------------------------------------------------------
+  const cacheSeries = new Map();
+  let usarApiDireta = false;
+
+  async function buscarDados(geocode, doenca, anoIni, anoFim) {
+    const chave = `${geocode}|${doenca}|${anoIni}|${anoFim}`;
+    if (cacheSeries.has(chave)) return cacheSeries.get(chave);
+
+    const qs = new URLSearchParams({
+      geocode, disease: doenca, format: "json",
+      ew_start: 1, ew_end: 52, ey_start: anoIni, ey_end: anoFim,
+    });
+    let resp;
+    if (!usarApiDireta) {
+      try {
+        resp = await fetch(`/api/alertcity?${qs}`);
+        if (resp.status === 404 || resp.status === 405) { usarApiDireta = true; resp = null; }
+      } catch { usarApiDireta = true; }
+    }
+    if (!resp) resp = await fetch(`https://info.dengue.mat.br/api/alertcity?${qs}`);
+    if (!resp.ok) {
+      const err = new Error(`HTTP ${resp.status}`);
+      err.status = resp.status;
+      throw err;
+    }
+    const txt = await resp.text();
+    let dados;
+    try { dados = JSON.parse(txt || "[]"); } catch { dados = []; }
+    if (!Array.isArray(dados)) dados = [];
+
+    const serie = dados
+      .map((d) => {
+        const ms = d.data_iniSE ?? d.data;
+        return { ...d, _data: typeof ms === "number" ? new Date(ms) : new Date(ms) };
+      })
+      .filter((d) => !isNaN(d._data))
+      .sort((a, b) => a._data - b._data);
+    cacheSeries.set(chave, serie);
+    return serie;
+  }
+
+  const colCasos = (serie) => (serie.length && "casos_est" in serie[0] ? "casos_est" : "casos");
+  const nivelDe = (n) => NIVEL[parseInt(n, 10)] || NIVEL[0];
+
+  // ---------------------------------------------------------------------------
+  // Tema dos gráficos (lê as variáveis CSS para acompanhar claro/escuro)
+  // ---------------------------------------------------------------------------
+  function corCSS(nome) { return getComputedStyle(document.documentElement).getPropertyValue(nome).trim(); }
+  function layoutBase(extra) {
+    const ink2 = corCSS("--ink-2"), line = corCSS("--line");
+    return Object.assign({
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "IBM Plex Sans, sans-serif", color: ink2, size: 12 },
+      margin: { l: 56, r: 16, t: 12, b: 44 },
+      xaxis: { gridcolor: line, linecolor: line, zeroline: false },
+      yaxis: { gridcolor: line, linecolor: line, zeroline: false, rangemode: "tozero", separatethousands: true },
+      legend: { orientation: "h", y: 1.1, x: 0 },
+      hoverlabel: { font: { family: "IBM Plex Sans, sans-serif" } },
+      separators: ",.",
+    }, extra || {});
+  }
+
+  // ---------------------------------------------------------------------------
+  // Abas
+  // ---------------------------------------------------------------------------
+  function ativarAba(qual) {
+    ["cidade", "mapa"].forEach((a) => {
+      $(`tab-${a}`).setAttribute("aria-selected", String(a === qual));
+      $(`panel-${a}`).hidden = a !== qual;
+    });
+    if (qual === "mapa" && mapa) setTimeout(() => mapa.invalidateSize(), 50);
+  }
+  $("tab-cidade").addEventListener("click", () => { ativarAba("cidade"); salvarHash(); });
+  $("tab-mapa").addEventListener("click", () => { ativarAba("mapa"); salvarHash(); });
+
+  // ---------------------------------------------------------------------------
+  // ABA 1 — Consulta por cidade
+  // ---------------------------------------------------------------------------
+  const cUf = $("c-uf"), cCidade = $("c-cidade"), cDoenca = $("c-doenca"), cIni = $("c-ano-ini"), cFim = $("c-ano-fim");
+  const cResult = $("c-result");
+  let consultaAtual = 0;
+
+  function preencherAnos() {
+    for (let a = 2015; a <= ANO_ATUAL; a++) {
+      cIni.add(new Option(a, a));
+      cFim.add(new Option(a, a));
+    }
+    cIni.value = Math.max(2015, ANO_ATUAL - 3);
+    cFim.value = ANO_ATUAL;
+  }
+
+  function preencherCidades(codigoUf) {
+    cCidade.innerHTML = "";
+    if (!codigoUf) {
+      cCidade.add(new Option("Primeiro escolha um estado…", ""));
+      cCidade.disabled = true;
+      return;
+    }
+    cCidade.add(new Option("Escolha um município…", ""));
+    const frag = document.createDocumentFragment();
+    cidadesDoEstado(codigoUf).forEach((c) => frag.appendChild(new Option(c.nome + (c.capital ? " (capital)" : ""), c.geocode)));
+    cCidade.appendChild(frag);
+    cCidade.disabled = false;
+  }
+
+  function mostrarVazio(msg, el = cResult) {
+    el.innerHTML = `<div class="empty">${msg}</div>`;
+  }
+
+  async function consultarCidade() {
+    const geocode = cCidade.value;
+    if (!cUf.value) return mostrarVazio("Selecione um estado e depois um município para visualizar os dados.");
+    if (!geocode) return mostrarVazio("Selecione um município para visualizar os dados.");
+
+    let anoIni = +cIni.value, anoFim = +cFim.value;
+    if (anoIni > anoFim) { [anoIni, anoFim] = [anoFim, anoIni]; cIni.value = anoIni; cFim.value = anoFim; }
+    const doenca = cDoenca.value;
+    const cidade = MUNICIPIOS.find((c) => c.geocode === +geocode);
+    const id = ++consultaAtual;
+
+    cResult.innerHTML = `<div class="empty"><div class="spinner"></div>Buscando dados de ${esc(DOENCA_NOME[doenca].toLowerCase())} para ${esc(cidade.nome)}…</div>`;
+
+    let serie;
+    try {
+      serie = await buscarDados(geocode, doenca, anoIni, anoFim);
+    } catch (e) {
+      if (id !== consultaAtual) return;
+      cResult.innerHTML = `<div class="notice warn">Erro ao consultar a API do InfoDengue (${esc(e.message)}). Tente novamente em instantes.</div>`;
+      return;
+    }
+    if (id !== consultaAtual) return;
+
+    if (!serie.length) {
+      cResult.innerHTML = `<div class="notice warn">Nenhum dado encontrado para esse município/período. Tente outro município ou amplie o período.</div>`;
+      return;
+    }
+    renderCidade(cidade, doenca, serie);
+  }
+
+  function renderCidade(cidade, doenca, serie) {
+    const col = colCasos(serie);
+    const ultima = serie[serie.length - 1];
+    const nv = nivelDe(ultima.nivel);
+    const total = serie.reduce((s, d) => s + (+d[col] || 0), 0);
+    const se = String(ultima.SE ?? ultima.se ?? "");
+    const semana = se.length === 6 ? `${se.slice(4)}/${se.slice(0, 4)}` : se;
+    const rt = ultima.Rt != null ? (+ultima.Rt).toFixed(2).replace(".", ",") : "—";
+    const uf = ESTADOS.find((e) => e.codigo_uf === cidade.codigo_uf)?.uf || "";
+
+    // Casos por ano
+    const porAno = {};
+    serie.forEach((d) => { const a = d._data.getUTCFullYear(); porAno[a] = (porAno[a] || 0) + (+d[col] || 0); });
+
+    const colunasTabela = ["SE", "casos", "casos_est", "casos_estmin", "casos_estmax", "nivel", "Rt", "p_inc100k", "tempmed", "umidmed"]
+      .filter((c) => c in ultima);
+
+    cResult.innerHTML = `
+      <div class="alert-banner" style="color:${nv.cor}">
+        <span class="dot" style="background:${nv.cor}"></span>
+        <div>
+          <div class="lbl">${esc(DOENCA_NOME[doenca])} em ${esc(cidade.nome)} – ${esc(uf)} · nível de alerta atual</div>
+          <div class="val" style="color:var(--ink)">${esc(nv.nome)} — ${esc(nv.label)}</div>
+        </div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="k">Última semana epidemiológica</div><div class="v">${esc(semana)}</div><div class="s">início em ${fmtData.format(ultima._data)}</div></div>
+        <div class="metric"><div class="k">Casos estimados na semana</div><div class="v">${fmt.format(Math.round(+ultima[col] || 0))}</div><div class="s">${ultima.casos != null ? fmt.format(+ultima.casos) + " notificados" : ""}</div></div>
+        <div class="metric"><div class="k">Total no período</div><div class="v">${fmt.format(Math.round(total))}</div><div class="s">${serie.length} semanas</div></div>
+        <div class="metric"><div class="k">Número reprodutivo (Rt)</div><div class="v">${rt}</div><div class="s">acima de 1 indica transmissão em alta</div></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><h3>Evolução semanal de casos</h3><div id="g-serie" class="chart"></div></div>
+        <div class="card"><h3>Casos estimados por ano</h3><div id="g-ano" class="chart short"></div></div>
+      </div>
+      <details>
+        <summary>Ver dados brutos (${serie.length} semanas)</summary>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Início da semana</th>${colunasTabela.map((c) => `<th class="num">${esc(c)}</th>`).join("")}</tr></thead>
+          <tbody>${serie.slice().reverse().map((d) => `<tr><td>${fmtData.format(d._data)}</td>${colunasTabela.map((c) => `<td class="num">${d[c] == null ? "" : esc(typeof d[c] === "number" && !Number.isInteger(d[c]) ? d[c].toFixed(2) : d[c])}</td>`).join("")}</tr>`).join("")}</tbody>
+        </table></div>
+      </details>`;
+
+    const accent = corCSS("--accent");
+    const x = serie.map((d) => d._data);
+    const tracos = [];
+    if ("casos_estmin" in ultima && "casos_estmax" in ultima) {
+      tracos.push({ x, y: serie.map((d) => d.casos_estmax), mode: "lines", line: { width: 0 }, showlegend: false, hoverinfo: "skip" });
+      tracos.push({ x, y: serie.map((d) => d.casos_estmin), mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: corCSS("--accent-soft"), name: "Intervalo de confiança", hoverinfo: "skip" });
+    }
+    tracos.push({
+      x, y: serie.map((d) => d[col]), mode: "lines", name: "Casos estimados",
+      line: { color: accent, width: 2.2 },
+      customdata: serie.map((d) => nivelDe(d.nivel).nome),
+      hovertemplate: "%{x|%d/%m/%Y}<br><b>%{y:,.0f}</b> casos · nível %{customdata}<extra></extra>",
+    });
+    Plotly.newPlot("g-serie", tracos, layoutBase({ hovermode: "x unified" }), { responsive: true, displaylogo: false, locale: "pt-BR" });
+
+    const anos = Object.keys(porAno);
+    Plotly.newPlot("g-ano", [{
+      type: "bar", x: anos, y: anos.map((a) => porAno[a]),
+      marker: { color: anos.map((a) => (+a === ANO_ATUAL ? accent : corCSS("--ink-3"))) },
+      hovertemplate: "%{x}: <b>%{y:,.0f}</b> casos<extra></extra>",
+      text: anos.map((a) => fmt.format(Math.round(porAno[a]))), textposition: "outside", cliponaxis: false,
+    }], layoutBase({ xaxis: { type: "category", linecolor: corCSS("--line") }, showlegend: false, margin: { l: 56, r: 16, t: 24, b: 40 } }), { responsive: true, displaylogo: false });
+  }
+
+  cUf.addEventListener("change", () => {
+    const e = estadoPorUf(cUf.value);
+    preencherCidades(e ? e.codigo_uf : null);
+    consultarCidade(); salvarHash();
+  });
+  [cCidade, cDoenca, cIni, cFim].forEach((el) => el.addEventListener("change", () => { consultarCidade(); salvarHash(); }));
+
+  // ---------------------------------------------------------------------------
+  // ABA 2 — Mapa por estado
+  // ---------------------------------------------------------------------------
+  const mUf = $("m-uf"), mDoenca = $("m-doenca"), mBtn = $("m-carregar"), mProg = $("m-progress"), mResult = $("m-result");
+  let mapa = null, camada = null, cargaAtual = 0;
+  const cacheMapa = new Map();
+
+  function atualizarBotao() {
+    const e = estadoPorUf(mUf.value);
+    mBtn.disabled = !e;
+    mBtn.textContent = e ? `Carregar mapa (${cidadesDoEstado(e.codigo_uf).length} municípios)` : "Carregar mapa";
+  }
+
+  async function snapshotCidade(cidade, doenca) {
+    let ultimoErro = null;
+    for (let t = 0; t < 2; t++) {
+      try {
+        const s = await buscarDados(cidade.geocode, doenca, ANO_ATUAL - 1, ANO_ATUAL);
+        if (!s.length || !("nivel" in s[0])) return { erro: "sem_dado" };
+        const u = s[s.length - 1];
+        const col = colCasos(s);
+        return { ok: { ...cidade, nivel: parseInt(u.nivel, 10) || 0, casos: +u[col] || 0, data: u._data } };
+      } catch (e) {
+        ultimoErro = e.status ? `HTTP ${e.status}` : "erro de conexão";
+        await new Promise((r) => setTimeout(r, 500 * (t + 1)));
+      }
+    }
+    return { erro: ultimoErro };
+  }
+
+  async function carregarMapa() {
+    const estado = estadoPorUf(mUf.value);
+    if (!estado) return;
+    const doenca = mDoenca.value;
+    const chave = `${estado.uf}|${doenca}`;
+    const id = ++cargaAtual;
+
+    if (cacheMapa.has(chave)) return renderMapa(estado, doenca, cacheMapa.get(chave));
+
+    const cidades = cidadesDoEstado(estado.codigo_uf);
+    const total = cidades.length;
+    const resultados = [], erros = {};
+    let feitos = 0, prox = 0;
+    mBtn.disabled = true;
+    mProg.innerHTML = `<div class="progress"><i></i></div><div class="progress-txt">Consultando InfoDengue para cada município… 0/${total}</div>`;
+    const barra = mProg.querySelector("i"), txt = mProg.querySelector(".progress-txt");
+
+    async function worker() {
+      while (prox < total && id === cargaAtual) {
+        const c = cidades[prox++];
+        const r = await snapshotCidade(c, doenca);
+        if (r.ok) resultados.push(r.ok); else if (r.erro) erros[r.erro] = (erros[r.erro] || 0) + 1;
+        feitos++;
+        barra.style.width = `${(feitos / total) * 100}%`;
+        txt.textContent = `Consultando municípios… ${feitos}/${total}`;
+      }
+    }
+    await Promise.all(Array.from({ length: 6 }, worker));
+    if (id !== cargaAtual) return;
+    mProg.innerHTML = "";
+    mBtn.disabled = false;
+
+    const pacote = { resultados, erros, total };
+    if (resultados.length) cacheMapa.set(chave, pacote);
+    renderMapa(estado, doenca, pacote);
+  }
+
+  function renderMapa(estado, doenca, { resultados, erros, total }) {
+    if (!resultados.length) {
+      const totalErros = Object.values(erros).reduce((a, b) => a + b, 0);
+      const semDado = erros.sem_dado || 0;
+      const maioriaSemDado = totalErros > 0 && semDado / totalErros >= 0.9;
+      let msg = "Não foi possível obter dados para nenhum município deste estado.";
+      if (doenca !== "dengue" && maioriaSemDado) {
+        msg = `Nenhum município de ${esc(estado.nome)} tem série recente suficiente para calcular o nível de alerta de <b>${esc(doenca)}</b>. Isso é esperado: os casos de ${esc(doenca)} são bem menos numerosos que os de dengue, e o InfoDengue frequentemente não gera o indicador semanal. Tente <b>Dengue</b>, que tem cobertura muito mais ampla.`;
+      }
+      mResult.innerHTML = `<div class="notice ${maioriaSemDado ? "info" : "warn"}">${msg}</div>` +
+        (totalErros ? `<details><summary>Detalhes técnicos (diagnóstico)</summary><pre style="font-size:13px">${esc(JSON.stringify(erros, null, 2))}</pre><p style="font-size:13px;color:var(--ink-3)">“sem_dado” significa que a API respondeu normalmente, mas não há série para essa doença na cidade. Erros como “HTTP 429” ou “timeout” indicam limite de requisições da API.</p></details>` : "");
+      return;
+    }
+
+    const cont = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    resultados.forEach((r) => { if (cont[r.nivel] != null) cont[r.nivel]++; });
+    const ranking = resultados.slice().sort((a, b) => b.casos - a.casos).slice(0, 30);
+    const cobertura = resultados.length / total;
+
+    mResult.innerHTML = `
+      <p style="color:var(--ink-3);font-size:13px;margin:16px 0 0">${resultados.length} de ${total} municípios com dado disponível para ${esc(doenca)}.
+      ${doenca !== "dengue" && cobertura < 0.5 ? " Cobertura mais baixa é esperada para essa doença, que tem bem menos casos notificados que dengue." : ""}</p>
+      <div class="summary-row">
+        ${[1, 2, 3, 4].map((n) => `<div class="lvl"><span class="dot" style="background:${NIVEL[n].cor};color:${NIVEL[n].cor}"></span><span>${NIVEL[n].nome}<br>${NIVEL[n].label}</span><b>${cont[n]}</b></div>`).join("")}
+      </div>
+      <div id="map" role="region" aria-label="Mapa de municípios por nível de alerta"></div>
+      <div class="card" style="margin-top:16px">
+        <h3>Ranking de municípios por casos estimados (última semana)</h3>
+        <div class="table-wrap" style="max-height:none"><table>
+          <thead><tr><th>#</th><th>Alerta</th><th>Município</th><th class="num">Casos estimados</th><th></th></tr></thead>
+          <tbody>${ranking.map((r, i) => `<tr><td>${i + 1}</td><td><span class="badge"><i style="background:${NIVEL[r.nivel]?.cor || NIVEL[0].cor}"></i>${esc(nivelDe(r.nivel).nome)}</span></td><td>${esc(r.nome)}</td><td class="num">${fmt.format(Math.round(r.casos))}</td><td><button class="mini-btn" data-geo="${r.geocode}">ver série</button></td></tr>`).join("")}</tbody>
+        </table></div>
+      </div>`;
+
+    if (mapa) { mapa.remove(); mapa = null; }
+    mapa = L.map("map", { scrollWheelZoom: false }).setView([estado.lat, estado.lon], 6);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      maxZoom: 18, subdomains: "abcd",
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    }).addTo(mapa);
+
+    camada = L.featureGroup();
+    resultados.slice().sort((a, b) => a.casos - b.casos).forEach((r) => {
+      const nv = nivelDe(r.nivel);
+      L.circleMarker([r.lat, r.lon], {
+        radius: Math.min(26, 4 + Math.sqrt(Math.max(r.casos, 0)) * 0.9),
+        color: "#ffffff", weight: 1, fillColor: nv.hex, fillOpacity: 0.82,
+      })
+        .bindPopup(`<b>${esc(r.nome)}</b><br>Nível: ${esc(nv.nome)} — ${esc(nv.label)}<br>Casos estimados: ${fmt.format(Math.round(r.casos))}<br><span style="color:#777">semana de ${fmtData.format(r.data)}</span><br><button class="mini-btn" data-geo="${r.geocode}">ver série histórica</button>`)
+        .addTo(camada);
+    });
+    camada.addTo(mapa);
+    if (camada.getLayers().length) mapa.fitBounds(camada.getBounds(), { padding: [20, 20] });
+  }
+
+  // "ver série" no ranking ou no popup → abre a aba de cidade já preenchida
+  document.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-geo]");
+    if (!b) return;
+    const cidade = MUNICIPIOS.find((c) => c.geocode === +b.dataset.geo);
+    const est = ESTADOS.find((e) => e.codigo_uf === cidade.codigo_uf);
+    cUf.value = est.uf;
+    preencherCidades(est.codigo_uf);
+    cCidade.value = cidade.geocode;
+    cDoenca.value = mDoenca.value;
+    ativarAba("cidade");
+    consultarCidade(); salvarHash();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  mUf.addEventListener("change", () => { atualizarBotao(); mResult.innerHTML = ""; salvarHash(); });
+  mDoenca.addEventListener("change", () => { mResult.innerHTML = ""; salvarHash(); });
+  mBtn.addEventListener("click", carregarMapa);
+
+  // ---------------------------------------------------------------------------
+  // Estado na URL (links compartilháveis)
+  // ---------------------------------------------------------------------------
+  function salvarHash() {
+    const p = new URLSearchParams();
+    if (!$("panel-mapa").hidden) {
+      p.set("aba", "mapa");
+      if (mUf.value) p.set("uf", mUf.value);
+      p.set("doenca", mDoenca.value);
+    } else {
+      if (cUf.value) p.set("uf", cUf.value);
+      if (cCidade.value) p.set("cidade", cCidade.value);
+      p.set("doenca", cDoenca.value);
+      p.set("de", cIni.value); p.set("ate", cFim.value);
+    }
+    history.replaceState(null, "", "#" + p.toString());
+  }
+
+  function lerHash() {
+    const p = new URLSearchParams(location.hash.slice(1));
+    const doenca = DOENCA_NOME[p.get("doenca")] ? p.get("doenca") : "dengue";
+    if (p.get("aba") === "mapa") {
+      ativarAba("mapa");
+      mDoenca.value = doenca;
+      if (estadoPorUf(p.get("uf"))) { mUf.value = p.get("uf"); atualizarBotao(); }
+      return;
+    }
+    cDoenca.value = doenca;
+    if (p.get("de")) cIni.value = Math.min(Math.max(+p.get("de"), 2015), ANO_ATUAL);
+    if (p.get("ate")) cFim.value = Math.min(Math.max(+p.get("ate"), 2015), ANO_ATUAL);
+    const est = estadoPorUf(p.get("uf"));
+    if (est) {
+      cUf.value = est.uf;
+      preencherCidades(est.codigo_uf);
+      if (p.get("cidade")) cCidade.value = p.get("cidade");
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Início
+  // ---------------------------------------------------------------------------
+  (async function iniciar() {
+    preencherAnos();
+    mostrarVazio('<div class="spinner"></div>Carregando lista de municípios…');
+    try {
+      await carregarLocalidades();
+    } catch (e) {
+      cResult.innerHTML = `<div class="notice warn">Não foi possível carregar a lista de municípios.</div>`;
+      return;
+    }
+    [cUf, mUf].forEach((sel) => ESTADOS.forEach((e) => sel.add(new Option(`${e.nome} (${e.uf})`, e.uf))));
+    lerHash();
+    consultarCidade();
+  })();
+
+  // Recolore os gráficos quando o sistema muda entre claro/escuro
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (cCidade.value) consultarCidade();
+  });
+})();
+</script>
+</body>
+</html>

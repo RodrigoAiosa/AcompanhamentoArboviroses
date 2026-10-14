@@ -1,0 +1,9 @@
+# O app Streamlit (Python) não roda na Vercel; lá publicamos só o index.html,
+# os CSVs de data/ e a função api/alertcity.js.
+app.py
+esconder_selo.py
+utils/
+requirements.txt
+.streamlit/
+__pycache__/
+venv/
